@@ -14,12 +14,16 @@ import type {
 /** Wire-format version this decoder understands (see scripts/build-tracks.ts). */
 export const PAYLOAD_VERSION = 1;
 
-function toFeature(track: EncodedTrack): ActivityFeature {
+function toFeature(track: EncodedTrack): ActivityFeature | null {
   const { poly, ...properties } = track;
   // @mapbox/polyline decodes to [lat, lng]; GeoJSON needs [lng, lat].
   const coordinates = polyline
     .decode(poly)
     .map(([lat, lng]) => [lng, lat] as [number, number]);
+  // A LineString needs >= 2 points. The builder guarantees this, but guard
+  // here too since decode is the app's only ingestion point — a corrupt or
+  // truncated payload shouldn't reach the map as a degenerate geometry.
+  if (coordinates.length < 2) return null;
   return {
     type: "Feature",
     geometry: { type: "LineString", coordinates },
@@ -36,6 +40,8 @@ export function decodeTracks(payload: TrackPayload): ActivityFeatureCollection {
   }
   return {
     type: "FeatureCollection",
-    features: payload.tracks.map(toFeature),
+    features: payload.tracks
+      .map(toFeature)
+      .filter((f): f is ActivityFeature => f !== null),
   };
 }

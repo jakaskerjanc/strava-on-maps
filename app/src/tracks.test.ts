@@ -83,6 +83,18 @@ describe("decodeTracks", () => {
     expect(decodeTracks({ v: 1, tracks: [] }).features).toEqual([]);
   });
 
+  test("drops degenerate geometries (< 2 points) instead of emitting them", () => {
+    const onePoint = encodeLngLat([[14.5, 46.05]]); // a single coordinate
+    const fc = decodeTracks({
+      v: 1,
+      tracks: [
+        track({ id: 1, poly: onePoint }),
+        track({ id: 2, poly: encodeLngLat(PATH) }),
+      ],
+    });
+    expect(fc.features.map((f) => f.properties.id)).toEqual([2]);
+  });
+
   test("throws on an unsupported payload version", () => {
     const bad = { v: PAYLOAD_VERSION + 1, tracks: [] } as TrackPayload;
     expect(() => decodeTracks(bad)).toThrow(/Unsupported tracks payload version/);
