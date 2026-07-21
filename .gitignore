@@ -5,4 +5,4 @@ dist/
 .claude/
 
 # Generated build artifact — rebuilt from data/activities.json each build
-app/public/activities.geojson
+app/public/tracks.json
