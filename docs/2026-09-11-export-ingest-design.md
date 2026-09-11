@@ -7,8 +7,9 @@ Status: draft, pending review
 `2026-08-27-garmin-ingest-design.md` / `-plan.md` (live-only Garmin API model).
 It **reuses** those docs' frontend refactors: collapsed single `polyline`,
 namespaced wire ids (`s:` / `g:`), `activityLink`, payload `v` → 2. It does
-**not** carry a per-row `source` field — canonical source is the id prefix and
-full provenance lives in `activity_sources` (see Schema).
+**not** carry a per-row `source` field — canonical source is the id prefix, and
+both services' native ids live in nullable `strava_id` / `garmin_id` columns on
+the activity row (see Schema).
 
 ## Problem
 
@@ -147,18 +148,24 @@ source_file:     str | None     # provenance (filename / zip entry / "api")
 `reconcile(incoming: RawActivity, store)` for every component run:
 
 1. **Exact**: `(source, source_id)` already stored → update that row in place.
+1. **Exact id**: `(strava_id or garmin_id)` from the incoming source already set
+   on a row → update that row in place. This is why both native ids are stored:
+   an incremental `garmin_fetch` re-pulling its overlap window matches by exact
+   `garmin_id` rather than fuzzy timestamp.
 2. **Cross-source**: else find a stored activity whose `start_time` is within
    **±90 s** *and* `moving_time` within **±5 %** → same real activity from
-   another source. Merge per policy; record the new source in `activity_sources`.
-   Do **not** change the canonical `id` (keeps `tracks.json` links stable).
-3. **New**: else insert; assign canonical `id`.
+   another source. Merge per policy and **fill in that source's id column**
+   (e.g. a Strava row gains its `garmin_id`). Do **not** change the canonical
+   `id` (keeps `tracks.json` links stable).
+3. **New**: else insert; assign canonical `id` + set the originating id column.
 
 **Merge policy** (configurable per field; default for this dataset):
 
 - **name, stats** → **Strava wins** (your curated names / edits).
 - **geometry** → the track with more points wins (equal underlying FIT → no-op).
-- **Garmin `activityId`** → always retained in `activity_sources` so a later
-  `garmin_fetch` matches by exact id and never re-inserts.
+- **native ids** → both `strava_id` and `garmin_id` are retained on the row, so
+  a later `garmin_fetch` matches by exact `garmin_id` and never re-inserts, and
+  the UI can deep-link to either service.
 
 Canonical `id` assignment: prefer a Strava id when the activity has one
 (`s:<stravaId>`), else `g:<garminId>` — applied deterministically so re-runs
@@ -171,6 +178,8 @@ converge no matter which component ran first.
 | col | type | note |
 |---|---|---|
 | `id` | TEXT PK | `s:<id>` / `g:<id>` (canonical, stable) — the prefix **is** the canonical source; no separate `source` column |
+| `strava_id` | TEXT | Strava native id; NULL if never seen on Strava. Indexed. |
+| `garmin_id` | TEXT | Garmin native id; NULL if never seen on Garmin. Indexed. |
 | `name` | TEXT | |
 | `type` | TEXT | canonical vocabulary |
 | `start_time` | TEXT | ISO-8601 UTC |
@@ -180,14 +189,11 @@ converge no matter which component ran first.
 | `polyline` | TEXT | precision-5 polyline, DP-simplified ~0.5 m (≈Strava density); `''` = no GPS |
 | `start_lat`, `start_lng` | REAL | dedup + future clustering |
 
-`activity_sources` (all raw contributors — auditable dedup + dual deep-links):
-
-| col | type |
-|---|---|
-| `activity_id` | TEXT FK → activities.id |
-| `source` | TEXT |
-| `source_id` | TEXT |
-| `source_file` | TEXT |
+An activity present in both services is **one row with both id columns set**;
+single-source activities leave the other NULL. Only 2 services exist (each of
+the 4 components maps to one), so an unbounded provenance/join table would be
+over-normalized — two nullable columns represent "both" directly and keep
+fetch-dedup (`WHERE garmin_id = ?`) and dual deep-links join-free.
 
 Access from Python: stdlib `sqlite3`. Access from the TS build:
 **better-sqlite3** (reliable on CI Node 22; `node:sqlite` is still flagged
@@ -206,8 +212,8 @@ is binary, so a future *daily* `fetch:garmin` commit re-stores the whole file
   decode → `simplify.ts` → re-encode → `EncodedTrack[]`. `tracks.json` shape
   unchanged except namespaced string `id` + payload `v` → 2.
 - Frontend: adopt the 2026-08-27 plan's Task 4 changes only — string `id`,
-  `activityLink(id)` returning a Strava **or** Garmin URL (from
-  `activity_sources`). No new UI.
+  `activityLink(id)` returning a Strava **or** Garmin URL (from the id prefix,
+  or both when `strava_id` + `garmin_id` are carried on the track). No new UI.
 
 ## Migration & retirement
 
@@ -228,9 +234,10 @@ is binary, so a future *daily* `fetch:garmin` commit re-stores the whole file
   - `garmin_import`: `file_id.type` filter picks only activities; summary↔FIT
     match by start_time.
   - normalize: type map (incl. unmapped-warn), unit scaling.
-  - dedupe: exact `source_id` update; cross-source ±90 s / ±5 % match; new
-    insert; **idempotent re-run** (running a component twice changes nothing).
-  - store: upsert + `activity_sources` rows.
+  - dedupe: exact id-column update; cross-source ±90 s / ±5 % match fills the
+    other id column; new insert; **idempotent re-run** (running a component twice
+    changes nothing).
+  - store: upsert; both-ids-set on a matched cross-source row.
 - **TS (`node:test`)** — fixture SQLite DB → `build-tracks` → assert
   `tracks.json` shape/version; existing `simplify` tests stay.
 - **App (vitest)** — unchanged apart from id/link fixtures (per 2026-08-27 Task
