@@ -5,8 +5,10 @@ Status: draft, pending review
 
 **Supersedes** the ingest and storage sections of
 `2026-08-27-garmin-ingest-design.md` / `-plan.md` (live-only Garmin API model).
-It **reuses** those docs' frontend refactors: `source` field, collapsed single
-`polyline`, namespaced wire ids (`s:` / `g:`), `activityLink`, payload `v` → 2.
+It **reuses** those docs' frontend refactors: collapsed single `polyline`,
+namespaced wire ids (`s:` / `g:`), `activityLink`, payload `v` → 2. It does
+**not** carry a per-row `source` field — canonical source is the id prefix and
+full provenance lives in `activity_sources` (see Schema).
 
 ## Problem
 
@@ -131,9 +133,14 @@ source_file:     str | None     # provenance (filename / zip entry / "api")
   Unmapped key → title-cased + warned (never silently bucketed).
 - **Units**: Strava CSV already SI-ish; Garmin summary needs ms→s, ×100→m.
   Emit meters / seconds / ISO-8601-UTC.
-- **Geometry**: FIT semicircles → degrees; encode `track` as a **precision-5
-  Google polyline** (full resolution; `build-tracks` simplifies at build). `[]`
-  track → `""` (no GPS).
+- **Geometry**: FIT semicircles → degrees; **Douglas–Peucker simplify at
+  ~0.5 m** (matches Strava's stored polyline density — measured 714 vs 739 pts;
+  reduces a per-second FIT from ~3,000 pts to ~700), then encode as a
+  **precision-5 Google polyline**. `[]` track → `""` (no GPS). The simplify pass
+  is **idempotent**: an already-sparse source (Strava-exported GPX, or the future
+  `strava_fetch` API polyline) has no points within tolerance, so it passes
+  through unchanged — no per-source "already compressed?" branch needed. Small
+  RDP implementation in `normalize` (mirrors `scripts/simplify.ts`).
 
 ## Dedupe & merge (`ingest/dedupe.py`) — per component, idempotent
 
@@ -163,15 +170,14 @@ converge no matter which component ran first.
 
 | col | type | note |
 |---|---|---|
-| `id` | TEXT PK | `s:<id>` / `g:<id>` (canonical, stable) |
-| `source` | TEXT | canonical source per policy |
+| `id` | TEXT PK | `s:<id>` / `g:<id>` (canonical, stable) — the prefix **is** the canonical source; no separate `source` column |
 | `name` | TEXT | |
 | `type` | TEXT | canonical vocabulary |
 | `start_time` | TEXT | ISO-8601 UTC |
 | `distance` | REAL | meters |
 | `moving_time` | INTEGER | seconds |
 | `elevation_gain` | REAL | meters |
-| `polyline` | TEXT | full-res Google polyline; `''` = no GPS |
+| `polyline` | TEXT | precision-5 polyline, DP-simplified ~0.5 m (≈Strava density); `''` = no GPS |
 | `start_lat`, `start_lng` | REAL | dedup + future clustering |
 
 `activity_sources` (all raw contributors — auditable dedup + dual deep-links):
@@ -186,6 +192,12 @@ converge no matter which component ran first.
 Access from Python: stdlib `sqlite3`. Access from the TS build:
 **better-sqlite3** (reliable on CI Node 22; `node:sqlite` is still flagged
 there).
+
+**Size** (measured against the real exports, ~500 activities, 83 % with GPS):
+DB ≈ **1.0 MB** at the 0.5 m import tolerance. Full per-second geometry would be
+~3.3 MB; wire `tracks.json` after the 5 m build simplify is ~0.25 MB. Note the DB
+is binary, so a future *daily* `fetch:garmin` commit re-stores the whole file
+(git can't delta it) — batch those commits when we design fetch cadence.
 
 ## TS build + frontend
 
