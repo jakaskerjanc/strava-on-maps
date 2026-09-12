@@ -65,6 +65,8 @@ class GarminImporter(BaseImporter):
         index = self._fit_index()
         for s in self._summaries():
             start = datetime.fromtimestamp(int(s["startTimeGmt"]) / 1000, tz=timezone.utc)
+            md = s.get("movingDuration")
+            duration = s.get("duration") or 0
             yield RawActivity(
                 source="garmin",
                 source_id=str(s["activityId"]),
@@ -72,7 +74,7 @@ class GarminImporter(BaseImporter):
                 type_raw=s.get("activityType") or "other",
                 start_time=start,
                 distance_m=(s.get("distance") or 0) / 100.0,
-                moving_time_s=int((s.get("movingDuration") or s.get("duration") or 0) / 1000),
+                moving_time_s=int((md if md is not None else duration) / 1000),
                 elevation_gain_m=(s.get("elevationGain") or 0) / 100.0,
                 track=self._track_for(start.timestamp(), index),
             )

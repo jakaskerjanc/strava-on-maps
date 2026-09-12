@@ -48,3 +48,4 @@ def test_matches_fit_geometry_and_scales_units(tmp_path):
     assert run.polyline != ""            # matched outdoor.fit
     gym = store.find_by_service_id(conn, "garmin", "900002")
     assert gym.polyline == ""            # no time-matched FIT
+    assert gym.moving_time == 2400 and gym.distance == 0.0 and gym.elevation_gain == 0.0
