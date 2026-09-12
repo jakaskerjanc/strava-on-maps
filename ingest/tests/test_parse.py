@@ -1,3 +1,4 @@
+import io
 import os
 from ingest.parse.gpx import parse_gpx
 from ingest.parse.tcx import parse_tcx
@@ -18,6 +19,14 @@ def test_tcx_skips_points_without_position():
     with open(os.path.join(FIX, "sample.tcx"), "rb") as f:
         p = parse_tcx(f)
     assert len(p.track) == 2          # 3rd trackpoint has no Position
+    assert p.track[1] == (46.051, 14.501)
+
+
+def test_tcx_tolerates_leading_whitespace():
+    with open(os.path.join(FIX, "sample.tcx"), "rb") as f:
+        raw = f.read()
+    p = parse_tcx(io.BytesIO(b"          " + raw))
+    assert len(p.track) == 2
     assert p.track[1] == (46.051, 14.501)
 
 

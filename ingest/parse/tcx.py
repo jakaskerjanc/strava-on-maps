@@ -6,7 +6,12 @@ _NS = {"t": "http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2"}
 
 
 def parse_tcx(fileobj) -> ParsedTrack:
-    root = ET.parse(fileobj).getroot()
+    data = fileobj.read()
+    if isinstance(data, str):
+        data = data.encode("utf-8")
+    if data[:3] == b"\xef\xbb\xbf":            # strip UTF-8 BOM
+        data = data[3:]
+    root = ET.fromstring(data.lstrip())        # tolerate leading whitespace before <?xml
     pts, start = [], None
     for tp in root.iterfind(".//t:Trackpoint", _NS):
         pos = tp.find("t:Position", _NS)
