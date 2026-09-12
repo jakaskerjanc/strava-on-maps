@@ -5,9 +5,6 @@
 import { writeFile, mkdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-// better-sqlite3 ships no bundled type declarations and @types/better-sqlite3
-// isn't installed; suppress the resulting implicit-any import error.
-// @ts-expect-error - no type declarations for better-sqlite3
 import Database from "better-sqlite3";
 import polyline from "@mapbox/polyline";
 import { simplifyLngLat } from "./simplify.ts";
