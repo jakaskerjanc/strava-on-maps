@@ -47,7 +47,8 @@ export interface TrackPayload {
  * This is the stable data contract the UI depends on.
  */
 export interface ActivityFeatureProps {
-  id: number;
+  /** Namespaced wire id: "s:<stravaId>" or "g:<garminId>". */
+  id: string;
   name: string;
   /** activity-type filter key */
   type: string;
