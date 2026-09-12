@@ -6,7 +6,7 @@ dist/
 .env.local
 .claude/
 
-# Generated build artifacts — rebuilt from data/activities.json each build.
+# Generated build artifacts — rebuilt from data/activities.sqlite each build.
 # activities.geojson is the pre-rename name; keep ignoring it so a stale local
 # copy is never committed or bundled into dist/.
 app/public/tracks.json
