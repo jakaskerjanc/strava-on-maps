@@ -15,10 +15,14 @@
     "build:icons": "tsx scripts/render-icons.ts",
     "build": "npm run build:tracks && npm --workspace app run build",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "tsx --test scripts/*.test.ts"
+    "test": "tsx --test scripts/*.test.ts",
+    "import:strava": "${PYTHON_BIN:-python3} -m ingest.strava_import",
+    "import:garmin": "${PYTHON_BIN:-python3} -m ingest.garmin_import",
+    "test:py": "${PYTHON_BIN:-python3} -m pytest ingest -q"
   },
   "dependencies": {
-    "@mapbox/polyline": "^1.2.1"
+    "@mapbox/polyline": "^1.2.1",
+    "better-sqlite3": "^11.0.0"
   },
   "devDependencies": {
     "@types/mapbox__polyline": "^1.0.5",

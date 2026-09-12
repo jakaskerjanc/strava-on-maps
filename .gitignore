@@ -1,4 +1,6 @@
 node_modules/
+.venv/
+data/raw/
 dist/
 .env
 .env.local
