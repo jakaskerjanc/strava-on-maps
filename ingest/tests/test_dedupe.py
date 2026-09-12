@@ -74,6 +74,17 @@ def test_garmin_only_exact_update_refreshes_metadata():
     assert m.moving_time == 1500
 
 
+def test_same_source_near_activities_stay_distinct():
+    conn = _fresh()
+    dedupe.reconcile(conn, _a())  # s:1
+    other = _a(id="s:2", strava_id="2", start_time="2026-08-01T06:30:30+00:00")  # 30s later, same moving_time
+    assert dedupe.reconcile(conn, other) == "insert"
+    rows = store.all_activities(conn)
+    assert len(rows) == 2
+    ids = {r.id for r in rows}
+    assert ids == {"s:1", "s:2"}
+
+
 def test_idempotent_reruns():
     conn = _fresh()
     dedupe.reconcile(conn, _a())

@@ -36,6 +36,8 @@ def reconcile(conn, incoming: Activity, *, window_s=90, moving_pct=0.05,
 
     # 2. cross-source time + moving_time match
     for cand in store.find_near(conn, incoming.start_time, window_s):
+        if getattr(cand, service + "_id"):
+            continue  # same-source candidate already ruled out in step 1: distinct activity
         a, b = cand.moving_time, incoming.moving_time
         close = (a and b and abs(a - b) <= moving_pct * max(a, b)) or (not a and not b)
         if close:
