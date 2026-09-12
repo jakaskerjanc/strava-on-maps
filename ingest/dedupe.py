@@ -6,9 +6,13 @@ def _merge(base: Activity, incoming: Activity, winner: str) -> Activity:
     """Keep base.id (canonical, stable). Fill both native ids. Apply policy."""
     strava_id = base.strava_id or incoming.strava_id
     garmin_id = base.garmin_id or incoming.garmin_id
-    inc_is_winner = (winner == "strava" and incoming.strava_id) or \
-                    (winner == "garmin" and incoming.garmin_id)
-    meta = incoming if inc_is_winner else base
+    win_id_attr = "strava_id" if winner == "strava" else "garmin_id"
+    if getattr(incoming, win_id_attr):
+        meta = incoming
+    elif getattr(base, win_id_attr):
+        meta = base
+    else:
+        meta = incoming   # winner's source not present on either -> fresh incoming wins
     geo = incoming if len(incoming.polyline) > len(base.polyline) else base
     return Activity(
         id=base.id, strava_id=strava_id, garmin_id=garmin_id,

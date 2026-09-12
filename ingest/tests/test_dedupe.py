@@ -54,6 +54,26 @@ def test_cross_source_no_match_when_time_far():
     assert len(store.all_activities(conn)) == 2
 
 
+def test_garmin_only_exact_update_refreshes_metadata():
+    conn = _fresh()
+    garmin = Activity(id="g:900", strava_id=None, garmin_id="900", name="Garmin Name",
+                      type="Ride", start_time="2026-08-01T06:30:00+00:00",
+                      distance=100.0, moving_time=1000, elevation_gain=5.0,
+                      polyline="cccc", start_lat=46.0, start_lng=14.0)
+    dedupe.reconcile(conn, garmin)
+    updated = Activity(id="g:900", strava_id=None, garmin_id="900", name="Garmin Name v2",
+                       type="Ride", start_time="2026-08-01T06:30:00+00:00",
+                       distance=150.0, moving_time=1500, elevation_gain=5.0,
+                       polyline="cccc", start_lat=46.0, start_lng=14.0)
+    assert dedupe.reconcile(conn, updated) == "update"
+    rows = store.all_activities(conn)
+    assert len(rows) == 1
+    m = rows[0]
+    assert m.name == "Garmin Name v2"
+    assert m.distance == 150.0
+    assert m.moving_time == 1500
+
+
 def test_idempotent_reruns():
     conn = _fresh()
     dedupe.reconcile(conn, _a())
