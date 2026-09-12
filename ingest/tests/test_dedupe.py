@@ -85,6 +85,21 @@ def test_same_source_near_activities_stay_distinct():
     assert ids == {"s:1", "s:2"}
 
 
+def test_cross_source_merges_despite_moving_time_gap():
+    conn = _fresh()
+    strava = _a(id="s:1", strava_id="1", garmin_id=None, name="Hike",
+                start_time="2026-08-01T06:30:00+00:00", moving_time=25055)
+    dedupe.reconcile(conn, strava)
+    garmin = Activity(id="g:900", strava_id=None, garmin_id="900", name="Hike",
+                      type="Ride", start_time="2026-08-01T06:30:05+00:00",  # 5s off
+                      distance=100.0, moving_time=15634, elevation_gain=5.0,
+                      polyline="bbbb", start_lat=46.0, start_lng=14.0)
+    assert dedupe.reconcile(conn, garmin) == "merge"
+    rows = store.all_activities(conn)
+    assert len(rows) == 1
+    assert rows[0].strava_id == "1" and rows[0].garmin_id == "900"
+
+
 def test_idempotent_reruns():
     conn = _fresh()
     dedupe.reconcile(conn, _a())
