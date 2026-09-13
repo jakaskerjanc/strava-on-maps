@@ -103,6 +103,10 @@ class GarminFetcher(BaseFetcher):
         store.init_schema(conn)
         hw = self.high_water(conn)
         conn.close()
+        # NOTE: high_water is MAX(start_time) across ALL sources. A newly-appearing
+        # Garmin activity older than a newer other-source row would fall at/below
+        # after_epoch and be skipped. Low-probability (daily cadence; strava fetch is
+        # a stub) and spec-conformant; documented as an accepted limitation.
         after_epoch = int(datetime.fromisoformat(hw).timestamp()) if hw else 0
 
         items, offset = [], 0
@@ -131,6 +135,7 @@ class GarminFetcher(BaseFetcher):
                     if failures >= MAX_CONSECUTIVE_FAILURES:
                         warnings.warn("consecutive detail failures; stopping run")
                         break
+                    continue  # don't store a GPS activity without its track; retry next run
             yield list_item_to_raw(item, track)
 
 

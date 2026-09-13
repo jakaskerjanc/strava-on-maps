@@ -2,6 +2,8 @@ import json
 import os
 from datetime import datetime, timezone
 
+import pytest
+
 from ingest import garmin_fetch as gf
 from ingest.model import RawActivity
 
@@ -127,3 +129,47 @@ def test_login_materializes_token_blob(tmp_path, monkeypatch):
     f._login()
     assert captured["blob"] == '{"di_token": "abc"}'
     assert captured["dir"] == f._tmpdir
+
+
+class FailingDetailClient(FakeClient):
+    def get_activity_details(self, activity_id, maxchart, maxpoly):
+        raise RuntimeError("boom")
+
+
+def test_detail_failure_is_not_persisted_and_retried(tmp_path):
+    import warnings
+
+    db = str(tmp_path / "db.sqlite")
+    # Run 1: outdoor detail fails -> outdoor skipped, only the indoor gym stored.
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        f = gf.GarminFetcher(db, delay_s=0, client=FailingDetailClient(_list(), _detail()))
+        assert f.run() == {"insert": 1, "update": 0, "merge": 0}
+    conn = store.connect(db)
+    assert store.find_by_service_id(conn, "garmin", "5000001") is None      # outdoor not stored
+    assert store.find_by_service_id(conn, "garmin", "5000002") is not None  # indoor stored
+    conn.close()
+
+    # Run 2: detail works -> the outdoor activity (newer than the gym) is now fetched + stored with geometry.
+    f2 = gf.GarminFetcher(db, delay_s=0, client=FakeClient(_list(), _detail()))
+    assert f2.run() == {"insert": 1, "update": 0, "merge": 0}
+    conn = store.connect(db)
+    row = store.find_by_service_id(conn, "garmin", "5000001")
+    assert row is not None and row.polyline != ""
+    conn.close()
+
+
+def test_login_rejected_token_exits_3(tmp_path, monkeypatch):
+    class FakeGarmin:
+        def login(self, tokdir):
+            raise Exception("401 unauthorized")
+
+    fake_mod = types.ModuleType("garminconnect")
+    fake_mod.Garmin = lambda *a, **k: FakeGarmin()
+    monkeypatch.setitem(sys.modules, "garminconnect", fake_mod)
+    monkeypatch.setenv("GARMIN_TOKEN", '{"di_token": "x"}')
+    monkeypatch.delenv("GARMINTOKENS", raising=False)
+    f = gf.GarminFetcher(str(tmp_path / "db.sqlite"))
+    with pytest.raises(SystemExit) as exc:
+        f._login()
+    assert exc.value.code == 3
