@@ -147,7 +147,7 @@ def main():
         out = os.environ.get("GARMIN_TOKEN_OUT")
         if out and f._client is not None:
             with open(out, "w") as fh:
-                fh.write(f._client.dumps())     # possibly-rotated blob CI diffs
+                fh.write(f._client.client.dumps())  # possibly-rotated blob CI diffs
         if f._tmpdir:
             shutil.rmtree(f._tmpdir, ignore_errors=True)
 
