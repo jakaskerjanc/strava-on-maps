@@ -12,12 +12,19 @@ import sys
 from garminconnect import Garmin
 
 
+def _prompt(text):
+    """Write prompt to stderr, read from stdin — never touches stdout."""
+    sys.stderr.write(text)
+    sys.stderr.flush()
+    return input()
+
+
 def main():
-    email = os.environ.get("GARMIN_EMAIL") or input("Garmin email: ").strip()
+    email = os.environ.get("GARMIN_EMAIL") or _prompt("Garmin email: ").strip()
     password = os.environ.get("GARMIN_PASSWORD") or getpass.getpass("Garmin password: ")
 
     def mfa():
-        return input("MFA code: ").strip()
+        return _prompt("MFA code: ").strip()
 
     g = Garmin(email=email, password=password, is_cn=False, prompt_mfa=mfa)
     print("logging in…", file=sys.stderr)
