@@ -5,18 +5,12 @@ import { describe, expect, test } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { SidePanel } from "./SidePanel";
+import { createActivityFilter } from "../activityFilter";
+import { activity } from "../testFixtures";
 
 const props = {
-  availableTypes: ["Run"],
-  typeCounts: { Run: 1 },
-  enabledTypes: new Set(["Run"]),
-  onToggleType: () => {},
-  minMonth: 0,
-  maxMonth: 1,
-  fromMonth: 0,
-  toMonth: 1,
-  onFromChange: () => {},
-  onToChange: () => {},
+  filter: createActivityFilter([activity()]),
+  onFilterChange: () => {},
   colorMode: "recency" as const,
   colorDomain: {
     tsMin: 0,
